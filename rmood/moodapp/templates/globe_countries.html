@@ -40,6 +40,43 @@
       font-size: 13px;
       margin-top: 3px;
     }
+    #lastCompleted {
+      position: absolute;
+      top: 120px;
+      left: 20px;
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 15px 20px;
+      border-radius: 6px;
+      z-index: 1000;
+      font-size: 14px;
+      min-width: 250px;
+      border-left: 4px solid #4caf50;
+    }
+    #lastCompleted .label {
+      color: #999;
+      font-size: 12px;
+      margin-bottom: 5px;
+    }
+    #lastCompleted .country-name {
+      font-size: 16px;
+      font-weight: bold;
+      color: #4caf50;
+    }
+    #lastCompleted .emotion-display {
+      margin-top: 8px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    #lastCompleted .emoji {
+      font-size: 32px;
+    }
+    #lastCompleted .score {
+      font-size: 20px;
+      font-weight: bold;
+      color: #ff4500;
+    }
     #worldRating {
       position: absolute;
       top: 20px;
@@ -137,6 +174,15 @@
     <div class="label">Currently updating:</div>
     <div class="country-name" id="currentCountry">Initializing...</div>
     <div class="subreddit" id="currentSubreddit"></div>
+  </div>
+  
+  <div id="lastCompleted">
+    <div class="label">Last Completed:</div>
+    <div class="country-name" id="lastCountry">Waiting...</div>
+    <div class="emotion-display">
+      <div class="emoji" id="lastEmoji">⏳</div>
+      <div class="score" id="lastScore">-</div>
+    </div>
   </div>
   
   <div id="worldRating">
@@ -416,6 +462,12 @@
           
           if (data.status === 'success') {
             console.log(`✓ Successfully fetched ${data.country} with emotion score: ${data.emotion_score}`);
+            
+            // Update last completed display
+            document.getElementById('lastCountry').textContent = data.country;
+            document.getElementById('lastEmoji').textContent = getEmoji(data.emotion_score);
+            document.getElementById('lastScore').textContent = `${data.emotion_score}/10`;
+            
             await loadCountryData(data.country);
             world.polygonsData(world.polygonsData());
             updateEmojiMarkers();

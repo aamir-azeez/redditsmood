@@ -134,4 +134,4 @@ REDDIT_CLIENT_SECRET = '***REMOVED***'
 REDDIT_USER_AGENT = '***REMOVED***'
 
 # OpenRouter API Configuration
-OPENROUTER_API_KEY = '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'  # Replace with your actual OpenRouter API key
+OPENROUTER_API_KEY = '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'  # Replace with your actual OpenRouter API key
