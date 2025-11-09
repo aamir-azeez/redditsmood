@@ -386,6 +386,7 @@
     }
 
     function startBackgroundFetching() {
+      // Update status display frequently
       setInterval(async () => {
         try {
           const statusResponse = await fetch('/get-fetch-status/');
@@ -399,8 +400,14 @@
         }
       }, 100);
 
-      fetchInterval = setInterval(async () => {
-        if (isFetching) return;
+      // Fetch function with dynamic retry logic
+      let nextFetchDelay = 3500; // Start with 3.5 second delay
+      
+      async function performFetch() {
+        if (isFetching) {
+          scheduleFetch(500); // Check again in 500ms if already fetching
+          return;
+        }
         
         isFetching = true;
         try {
@@ -408,21 +415,45 @@
           const data = await response.json();
           
           if (data.status === 'success') {
-            console.log(`Successfully fetched ${data.country} with emotion score: ${data.emotion_score}`);
+            console.log(`✓ Successfully fetched ${data.country} with emotion score: ${data.emotion_score}`);
             await loadCountryData(data.country);
             world.polygonsData(world.polygonsData());
             updateEmojiMarkers();
+            nextFetchDelay = 3500; // Reset to normal delay after success
+            scheduleFetch(nextFetchDelay);
           } else if (data.status === 'rate_limited') {
-            console.log(`Rate limited, waiting ${data.wait_time}s`);
+            console.log(`⏱ Rate limited by server. Waiting ${data.wait_time}s before retry`);
+            // Wait the exact time the server told us, plus a small buffer
+            nextFetchDelay = (data.wait_time * 1000) + 500;
+            scheduleFetch(nextFetchDelay);
           } else if (data.status === 'already_fetching') {
-            console.log('Already fetching another country');
+            console.log('⏳ Another request in progress, will retry shortly');
+            // Retry sooner when another fetch is in progress
+            nextFetchDelay = 1000;
+            scheduleFetch(nextFetchDelay);
+          } else {
+            console.log(`Status: ${data.status}`, data.message || '');
+            // For other statuses, use default delay
+            scheduleFetch(3500);
           }
         } catch (error) {
-          console.error('Fetch error:', error);
+          console.error('❌ Fetch error:', error);
+          // On error, wait a bit longer before retrying
+          scheduleFetch(5000);
         } finally {
           isFetching = false;
         }
-      }, 2000);
+      }
+      
+      function scheduleFetch(delay) {
+        if (fetchInterval) {
+          clearTimeout(fetchInterval);
+        }
+        fetchInterval = setTimeout(performFetch, delay);
+      }
+      
+      // Start the first fetch after a short delay
+      scheduleFetch(1000);
     }
 
     document.addEventListener('click', (e) => {

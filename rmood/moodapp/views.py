@@ -192,10 +192,17 @@ def globe_countries(request):
         )
     
     fetch_queue, created = FetchQueue.objects.get_or_create(id=1)
-    if created or fetch_queue.is_fetching:
+    if created:
+        # Initialize with a time that allows immediate fetching
         fetch_queue.is_fetching = False
-        fetch_queue.last_fetch_time = timezone.now() - timedelta(seconds=2)
+        fetch_queue.last_fetch_time = timezone.now() - timedelta(seconds=10)
         fetch_queue.save()
+    elif fetch_queue.is_fetching:
+        # If it was stuck in fetching state, reset it
+        time_since_last_fetch = (timezone.now() - fetch_queue.last_fetch_time).total_seconds()
+        if time_since_last_fetch > 60:
+            fetch_queue.is_fetching = False
+            fetch_queue.save()
     
     FetchStatus.objects.get_or_create(
         pk=1,
@@ -289,10 +296,13 @@ def fetch_next_country(request):
             now = timezone.now()
             time_since_last_fetch = (now - fetch_queue.last_fetch_time).total_seconds()
             
-            if time_since_last_fetch < 2.0:
+            # Enforce minimum 3 second delay between fetches to avoid rate limits
+            min_delay = 3.5
+            if time_since_last_fetch < min_delay:
                 return JsonResponse({
                     'status': 'rate_limited',
-                    'wait_time': round(2.0 - time_since_last_fetch, 2)
+                    'wait_time': round(min_delay - time_since_last_fetch, 2),
+                    'message': 'Rate limit protection active'
                 })
             
             if fetch_queue.is_fetching:
@@ -300,7 +310,10 @@ def fetch_next_country(request):
                     fetch_queue.is_fetching = False
                     fetch_queue.save()
                 else:
-                    return JsonResponse({'status': 'already_fetching'})
+                    return JsonResponse({
+                        'status': 'already_fetching',
+                        'message': 'Another request is currently being processed'
+                    })
             
             fetch_queue.is_fetching = True
             fetch_queue.last_fetch_time = now
