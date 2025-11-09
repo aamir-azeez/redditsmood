@@ -13,27 +13,29 @@ import requests
 from .models import Country, RedditPost, FetchQueue, FetchStatus
 
 def check_emotion(titles, country):
-    api_key = settings.GEMINI_API_KEY
+    api_key = settings.OPENROUTER_API_KEY
     all_titles = " ".join(titles)
     prompt = f"ONLY GIVE ME ONE NUMBER BETWEEN 1 AND 10 THAT REPRESENTS THE OVERALL EMOTION OF THE FOLLOWING TEXTS: {all_titles}"
 
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent"
+    url = "https://openrouter.ai/api/v1/chat/completions"
 
     headers = {
-        "x-goog-api-key": api_key,
-        "Content-Type": "application/json"
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "http://localhost:8000",  # Optional: your site URL
+        "X-Title": "Reddit Mood Analyzer",  # Optional: your app name
     }
 
     data = {
-        "contents": [
+        "model": "google/gemini-2.5-flash-lite",  # Free Gemini model via OpenRouter
+        "messages": [
             {
-                "parts": [
-                    {
-                        "text": prompt
-                    }
-                ]
+                "role": "user",
+                "content": prompt
             }
-        ]
+        ],
+        "temperature": 0.7,
+        "max_tokens": 10,  # We only need a single number
     }
 
     try:
@@ -41,39 +43,37 @@ def check_emotion(titles, country):
         response_json = response.json()
         
         # Debug: print the full response
-        print(f"Gemini API response for {country}: {response_json}")
+        print(f"OpenRouter API response for {country}: {response_json}")
         
         # Check for error in response
         if "error" in response_json:
-            print(f"Gemini API error: {response_json['error']}")
+            print(f"OpenRouter API error: {response_json['error']}")
             return 5  # Default neutral score
         
-        # Check if candidates exist
-        if "candidates" not in response_json or not response_json["candidates"]:
-            print(f"No candidates in Gemini response for {country}")
+        # Check if choices exist
+        if "choices" not in response_json or not response_json["choices"]:
+            print(f"No choices in OpenRouter response for {country}")
             return 5  # Default neutral score
         
         # Extract the text
-        text_output = response_json["candidates"][0]["content"]["parts"][0]["text"]
+        text_output = response_json["choices"][0]["message"]["content"].strip()
         
         # Try to extract just the number
-        score_text = text_output.strip()
-        # Remove any non-numeric characters except digits
         import re
-        numbers = re.findall(r'\d+', score_text)
+        numbers = re.findall(r'\d+', text_output)
         if numbers:
             score = int(numbers[0])
             # Clamp between 1 and 10
             return max(1, min(10, score))
         else:
-            print(f"Could not parse number from: {score_text}")
+            print(f"Could not parse number from: {text_output}")
             return 5
             
     except requests.exceptions.RequestException as e:
-        print(f"Network error calling Gemini API: {e}")
+        print(f"Network error calling OpenRouter API: {e}")
         return 5
     except (KeyError, IndexError, ValueError) as e:
-        print(f"Error parsing Gemini response: {e}")
+        print(f"Error parsing OpenRouter response: {e}")
         return 5
     except Exception as e:
         print(f"Unexpected error in check_emotion: {e}")

@@ -132,4 +132,6 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 REDDIT_CLIENT_ID = '***REMOVED***'
 REDDIT_CLIENT_SECRET = '***REMOVED***'
 REDDIT_USER_AGENT = '***REMOVED***'
-GEMINI_API_KEY = 'AIzaSyBt0_vfDxbFZVD3kuTLkpDpfSlZKudBBjQ'
+
+# OpenRouter API Configuration
+OPENROUTER_API_KEY = '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'  # Replace with your actual OpenRouter API key
