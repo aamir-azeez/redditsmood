@@ -9,17 +9,46 @@ import json
 from pathlib import Path
 from datetime import timedelta, datetime
 import pytz
-from .models import Country, RedditPost, FetchQueue
+import requests
+from .models import Country, RedditPost, FetchQueue, FetchStatus
+
+def check_emotion(titles, country):
+    api_key = settings.GEMINI_API_KEY
+    all_titles = " ".join(titles)
+    prompt = f"Rate the emotion of these sentences on a scale of 1 to 10, 1 (immediate end of world) 5 (x is ok) 10 (immediate utopia), consider this on the scale of {country} and not an individual, only respond with the number: '{all_titles}'"
+
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent"
+
+    headers = {
+        "x-goog-api-key": api_key,
+        "Content-Type": "application/json"
+    }
+
+    data = {
+        "contents": [
+            {
+                "parts": [
+                    {
+                        "text": prompt
+                    }
+                ]
+            }
+        ]
+    }
+
+    response = requests.post(url, headers=headers, json=data)
+    response_json = response.json()
+
+    text_output = response_json["candidates"][0]["content"]["parts"][0]["text"]
+    return int(text_output.strip())
 
 def dubai_posts(request):
-    # Initialize Reddit instance
     reddit = praw.Reddit(
         client_id=settings.REDDIT_CLIENT_ID,
         client_secret=settings.REDDIT_CLIENT_SECRET,
         user_agent=settings.REDDIT_USER_AGENT
     )
     
-    # Get last 10 posts from r/dubai
     subreddit = reddit.subreddit('dubai')
     posts = []
     
@@ -37,12 +66,10 @@ def dubai_posts(request):
     return render(request, 'dubai_posts.html', {'posts': posts})
 
 def globe_countries(request):
-    # Load GeoJSON to get all countries
     geojson_path = Path(__file__).resolve().parent / 'templates' / 'ne_110m_admin_0_countries.geojson'
     with open(geojson_path, 'r', encoding='utf-8') as f:
         geojson_data = json.load(f)
     
-    # Map country names to subreddit names
     country_to_subreddit = {
         'United States of America': 'UnitedStates',
         'United Kingdom': 'UnitedKingdom',
@@ -92,13 +119,34 @@ def globe_countries(request):
         'Saudi Arabia': 'saudiarabia',
     }
     
-    # Initialize countries in database if they don't exist
+    country_coords = {}
+    
     for feature in geojson_data['features']:
         country_name = feature['properties']['ADMIN']
         iso_a2 = feature['properties']['ISO_A2']
         
-        if iso_a2 == 'AQ':  # Skip Antarctica
+        if iso_a2 == 'AQ':
             continue
+        
+        geometry = feature['geometry']
+        
+        if geometry['type'] == 'Polygon':
+            coords = geometry['coordinates'][0]
+        elif geometry['type'] == 'MultiPolygon':
+            coords = geometry['coordinates'][0][0]
+        else:
+            continue
+        
+        lats = [c[1] for c in coords]
+        lngs = [c[0] for c in coords]
+        
+        centroid_lat = sum(lats) / len(lats)
+        centroid_lng = sum(lngs) / len(lngs)
+        
+        country_coords[country_name] = {
+            'lat': centroid_lat,
+            'lng': centroid_lng
+        }
         
         subreddit_name = country_to_subreddit.get(country_name, country_name.replace(' ', '').lower())
         
@@ -107,15 +155,21 @@ def globe_countries(request):
             defaults={'subreddit': subreddit_name}
         )
     
-    # Initialize FetchQueue if it doesn't exist
     fetch_queue, created = FetchQueue.objects.get_or_create(id=1)
     if created or fetch_queue.is_fetching:
-        # Reset if stuck
         fetch_queue.is_fetching = False
         fetch_queue.last_fetch_time = timezone.now() - timedelta(seconds=2)
         fetch_queue.save()
     
-    # Send country to subreddit mapping to frontend
+    FetchStatus.objects.get_or_create(
+        pk=1,
+        defaults={
+            'current_country': 'Waiting...',
+            'current_subreddit': '',
+            'is_fetching': False
+        }
+    )
+    
     country_subreddit_mapping = {}
     for feature in geojson_data['features']:
         country_name = feature['properties']['ADMIN']
@@ -128,11 +182,11 @@ def globe_countries(request):
         country_subreddit_mapping[country_name] = subreddit_name
     
     return render(request, 'globe_countries.html', {
-        'country_subreddit_mapping': json.dumps(country_subreddit_mapping)
+        'country_subreddit_mapping': json.dumps(country_subreddit_mapping),
+        'country_coords': json.dumps(country_coords)
     })
 
 def get_country_data(request):
-    """Get cached country data from database"""
     country_name = request.GET.get('country')
     
     if not country_name:
@@ -140,7 +194,7 @@ def get_country_data(request):
     
     try:
         country = Country.objects.get(name=country_name)
-        posts = country.posts.all()[:50]  # Get all posts (max 50)
+        posts = country.posts.all()[:50]
         
         return JsonResponse({
             'country': country.name,
@@ -154,6 +208,7 @@ def get_country_data(request):
             } for post in posts],
             'count': posts.count(),
             'last_updated': country.last_updated.isoformat() if country.last_updated else None,
+            'emotion_score': country.emotion_score,
         })
     except Country.DoesNotExist:
         return JsonResponse({
@@ -161,14 +216,12 @@ def get_country_data(request):
             'subreddit': '',
             'posts': [],
             'count': 0,
-            'last_updated': None
+            'last_updated': None,
+            'emotion_score': 5,
         })
 
 @require_http_methods(["GET"])
 def get_fetch_status(request):
-    """Return the current fetch status (which country is being fetched next)"""
-    from .models import FetchStatus  # Assuming you have a FetchStatus model
-    
     try:
         status = FetchStatus.objects.first()
         if status:
@@ -191,48 +244,47 @@ def get_fetch_status(request):
         })
 
 def fetch_next_country(request):
-    """Fetch Reddit data for the next country in queue (rate limited to 1 per second)"""
     from django.db import transaction
     
     try:
-        # Use select_for_update to prevent race conditions
         with transaction.atomic():
             fetch_queue = FetchQueue.objects.select_for_update().get(id=1)
             
             now = timezone.now()
             time_since_last_fetch = (now - fetch_queue.last_fetch_time).total_seconds()
             
-            # Rate limit check
-            if time_since_last_fetch < 1.0:
+            if time_since_last_fetch < 2.0:
                 return JsonResponse({
                     'status': 'rate_limited',
-                    'wait_time': round(1.0 - time_since_last_fetch, 2)
+                    'wait_time': round(2.0 - time_since_last_fetch, 2)
                 })
             
-            # Check if another process is fetching
             if fetch_queue.is_fetching:
-                # Check if it's been stuck for more than 30 seconds
-                if time_since_last_fetch > 30:
+                if time_since_last_fetch > 60:
                     fetch_queue.is_fetching = False
                     fetch_queue.save()
                 else:
                     return JsonResponse({'status': 'already_fetching'})
             
-            # Mark as fetching
             fetch_queue.is_fetching = True
             fetch_queue.last_fetch_time = now
             fetch_queue.save()
         
+        fetch_status = FetchStatus.objects.get(pk=1)
+        
         try:
-            # Get the country that was updated least recently (continuously cycle)
             country = Country.objects.order_by('last_updated', 'name').first()
             
             if not country:
                 return JsonResponse({'status': 'no_countries'})
             
+            fetch_status.current_country = country.name
+            fetch_status.current_subreddit = country.subreddit
+            fetch_status.is_fetching = True
+            fetch_status.save()
+            
             print(f"Fetching data for {country.name} (r/{country.subreddit})...")
             
-            # Initialize Reddit
             reddit = praw.Reddit(
                 client_id=settings.REDDIT_CLIENT_ID,
                 client_secret=settings.REDDIT_CLIENT_SECRET,
@@ -241,14 +293,13 @@ def fetch_next_country(request):
             )
             
             posts_data = []
+            titles = []
             error_msg = None
             
             try:
                 subreddit = reddit.subreddit(country.subreddit)
                 
-                # Fetch 50 newest posts
-                for submission in subreddit.new(limit=50):
-                    # Convert Unix timestamp to timezone-aware datetime
+                for submission in subreddit.hot(limit=50):
                     created_dt = datetime.fromtimestamp(submission.created_utc, tz=pytz.UTC)
                     
                     posts_data.append({
@@ -260,15 +311,17 @@ def fetch_next_country(request):
                         'author': str(submission.author),
                         'created_utc': created_dt,
                     })
+                    
+                    titles.append(submission.title)
                 
                 print(f"Found {len(posts_data)} posts for {country.name}")
                 
-                # Replace all posts for this country with new ones
+                emotion_score = check_emotion(titles, country.name)
+                print(f"Emotion score for {country.name}: {emotion_score}")
+                
                 with transaction.atomic():
-                    # Delete all existing posts for this country
                     country.posts.all().delete()
                     
-                    # Add new posts
                     for post_data in posts_data:
                         RedditPost.objects.create(
                             country=country,
@@ -281,12 +334,15 @@ def fetch_next_country(request):
                             created_utc=post_data['created_utc'],
                         )
                     
-                    # Update country metadata
                     country.last_updated = timezone.now()
                     country.post_count = len(posts_data)
+                    country.emotion_score = emotion_score
                     country.save()
                     
-                    print(f"Replaced with {len(posts_data)} new posts. Total: {country.post_count}")
+                    print(f"Replaced with {len(posts_data)} new posts. Emotion: {emotion_score}/10")
+                
+                fetch_status.is_fetching = False
+                fetch_status.save()
                 
                 return JsonResponse({
                     'status': 'success',
@@ -294,15 +350,18 @@ def fetch_next_country(request):
                     'subreddit': country.subreddit,
                     'posts_fetched': len(posts_data),
                     'total_posts': country.post_count,
+                    'emotion_score': emotion_score,
                 })
             
             except Exception as e:
                 error_msg = str(e)
                 print(f"Error fetching r/{country.subreddit}: {error_msg}")
                 
-                # Still update the country so we don't keep retrying failed ones immediately
                 country.last_updated = timezone.now()
                 country.save()
+                
+                fetch_status.is_fetching = False
+                fetch_status.save()
                 
                 return JsonResponse({
                     'status': 'error',
@@ -312,7 +371,6 @@ def fetch_next_country(request):
                 })
         
         finally:
-            # Always release the lock
             fetch_queue = FetchQueue.objects.get(id=1)
             fetch_queue.is_fetching = False
             fetch_queue.save()

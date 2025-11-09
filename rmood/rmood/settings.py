@@ -37,7 +37,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'moodapp',  # add this line
+    'moodapp',
 ]
 
 MIDDLEWARE = [
@@ -126,7 +126,10 @@ STATICFILES_DIRS = [
     BASE_DIR / 'moodapp' / 'templates',
 ]
 
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
 # Reddit API Configuration
 REDDIT_CLIENT_ID = '***REMOVED***'
 REDDIT_CLIENT_SECRET = '***REMOVED***'
 REDDIT_USER_AGENT = '***REMOVED***'
+GEMINI_API_KEY = 'AIzaSyBt0_vfDxbFZVD3kuTLkpDpfSlZKudBBjQ'

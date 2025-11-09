@@ -97,12 +97,17 @@
       font-size: 12px;
       margin-top: 5px;
     }
+    .country-emoji {
+      pointer-events: none;
+      transition: font-size 0.3s;
+    }
   </style>
 
   <script src="https://cdn.jsdelivr.net/npm/globe.gl"></script>
 </head>
 
 <body>
+  {% csrf_token %}
   <div id="globeViz"></div>
   
   <div id="statusBox">
@@ -117,23 +122,46 @@
   </div>
 
   <script>
-    // Country to subreddit mapping from Django
     const countrySubredditMapping = {{ country_subreddit_mapping|safe }};
+    const countryCoords = {{ country_coords|safe }};
     
-    // Store fetched data
     const countriesData = {};
     let selectedCountry = null;
     let isFetching = false;
     let fetchInterval = null;
 
-    // Initialize Globe
+    function getCookie(name) {
+      let cookieValue = null;
+      if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+          const cookie = cookies[i].trim();
+          if (cookie.substring(0, name.length + 1) === (name + '=')) {
+            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+            break;
+          }
+        }
+      }
+      return cookieValue;
+    }
+
+    const csrftoken = getCookie('csrftoken') || document.querySelector('[name=csrfmiddlewaretoken]')?.value;
+
+    function getEmoji(score) {
+      if (score <= 2) return '😭';
+      if (score <= 4) return '😟';
+      if (score <= 6) return '😐';
+      if (score <= 8) return '🙂';
+      return '😊';
+    }
+
     const world = new Globe(document.getElementById('globeViz'))
-      .globeImageUrl('/static/earth-blue-marble.jpg')
+      .globeImageUrl('//unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
       .backgroundColor('#000000')
       .polygonCapColor(feat => {
         const countryName = feat.properties.ADMIN;
         if (selectedCountry === countryName) {
-          return 'rgba(255, 165, 0, 0.9)';
+          return 'rgba(255, 215, 0, 0.9)';
         }
         return countriesData[countryName] ? 'rgba(255, 69, 0, 0.7)' : 'rgba(100, 100, 100, 0.3)';
       })
@@ -142,15 +170,63 @@
       .polygonAltitude(feat => {
         const countryName = feat.properties.ADMIN;
         if (selectedCountry === countryName) {
-          return 0.05; // Raise selected country
+          return 0.02;
         }
         return countriesData[countryName] ? 0.01 : 0.005;
       })
-      .onPolygonClick(handlePolygonClick);
+      .onPolygonHover(handlePolygonHover)
+      .onPolygonClick(handlePolygonClick)
+      .htmlElementsData([])
+      .htmlElement(d => {
+        const el = document.createElement('div');
+        el.innerHTML = `<div class="country-emoji" style="font-size: ${d.hover ? '48px' : '32px'}">${getEmoji(d.score)}</div>`;
+        el.style.color = 'white';
+        el.style.pointerEvents = 'none';
+        return el;
+      });
 
-    // Auto-rotate
     world.controls().autoRotate = true;
     world.controls().autoRotateSpeed = 0.5;
+
+    function updateEmojiMarkers() {
+      const markers = Object.keys(countriesData)
+        .filter(name => {
+          return countriesData[name] && 
+                 countriesData[name].emotion_score !== undefined && 
+                 countryCoords[name];
+        })
+        .map(name => ({
+          name: name,
+          lat: countryCoords[name].lat,
+          lng: countryCoords[name].lng,
+          score: countriesData[name].emotion_score,
+          hover: false
+        }));
+      
+      world.htmlElementsData(markers);
+    }
+
+    function handlePolygonHover(polygon) {
+      if (!polygon) {
+        const markers = world.htmlElementsData();
+        markers.forEach(m => {
+          m.hover = false;
+        });
+        world.htmlElementsData(markers);
+        return;
+      }
+      
+      const countryName = polygon.properties.ADMIN;
+      const data = countriesData[countryName];
+      
+      if (data && data.emotion_score !== undefined) {
+        const markers = world.htmlElementsData();
+        markers.forEach(m => {
+          m.hover = m.name === countryName;
+        });
+        world.htmlElementsData(markers);
+      }
+    }
 
     function handlePolygonClick(polygon) {
       if (!polygon) return;
@@ -158,14 +234,11 @@
       const countryName = polygon.properties.ADMIN;
       selectedCountry = countryName;
       
-      // Stop auto-rotation
       world.controls().autoRotate = false;
       
-      // Elevate the polygon
       world.polygonsTransitionDuration(500);
       world.polygonsData(world.polygonsData());
       
-      // Show popup with posts
       showCountryPopup(countryName);
     }
 
@@ -173,10 +246,8 @@
       document.getElementById('countryPopup').style.display = 'none';
       selectedCountry = null;
       
-      // Resume auto-rotation
       world.controls().autoRotate = true;
       
-      // Lower the polygon
       world.polygonsTransitionDuration(500);
       world.polygonsData(world.polygonsData());
     }
@@ -192,105 +263,104 @@
         const response = await fetch(`/get-country-data/?country=${encodeURIComponent(countryName)}`);
         const data = await response.json();
         
-        let html = `<h2>${countryName}</h2>`;
-        html += `<div class="meta">r/${data.subreddit}`;
-        if (data.count > 0) {
-          html += ` • ${data.count} posts`;
-        }
-        if (data.last_updated) {
-          html += ` • Updated: ${new Date(data.last_updated).toLocaleString()}`;
-        }
-        html += `</div>`;
+        const emoji = getEmoji(data.emotion_score);
+        let html = `<h2>${emoji} ${countryName}</h2>`;
+        html += `<div class="meta">r/${data.subreddit} - Emotion Score: ${data.emotion_score}/10 - ${data.count} posts</div>`;
         
-        if (data.posts.length === 0) {
-          html += '<div style="color: #999; font-style: italic;">No posts found yet. Data is being fetched...</div>';
-        } else {
+        if (data.posts && data.posts.length > 0) {
           data.posts.forEach(post => {
-            html += `<div class="post">`;
-            html += `<a href="${post.permalink}" target="_blank">${post.title}</a>`;
-            html += `<div class="post-meta">⬆️ ${post.score} • 💬 ${post.num_comments} • by u/${post.author}</div>`;
-            html += `</div>`;
+            html += `
+              <div class="post">
+                <a href="${post.permalink}" target="_blank">${post.title}</a>
+                <div class="post-meta">
+                  👤 u/${post.author} | ⬆️ ${post.score} | 💬 ${post.num_comments}
+                </div>
+              </div>
+            `;
           });
+        } else {
+          html += '<div class="post">No posts available yet</div>';
         }
         
         content.innerHTML = html;
       } catch (error) {
-        content.innerHTML = '<div style="color: #b00020;">Error loading data</div>';
-        console.error('Error:', error);
+        content.innerHTML = '<div style="color: #ff4444;">Error loading data</div>';
       }
     }
 
-    // Load GeoJSON and setup
     fetch('/static/ne_110m_admin_0_countries.geojson').then(res => res.json()).then(countries => {
       const countryFeatures = countries.features.filter(d => d.properties.ISO_A2 !== 'AQ');
       world.polygonsData(countryFeatures);
 
-      // Load existing data from database for all countries
       loadAllCountriesData(countryFeatures);
 
-      // Start background fetching (1 country per second)
       startBackgroundFetching();
     });
 
     async function loadAllCountriesData(countryFeatures) {
       for (const feat of countryFeatures) {
         const countryName = feat.properties.ADMIN;
-        try {
-          const response = await fetch(`/get-country-data/?country=${encodeURIComponent(countryName)}`);
-          const data = await response.json();
-          
-          if (data.posts && data.posts.length > 0) {
-            countriesData[countryName] = data;
-          }
-        } catch (error) {
-          console.error(`Error loading ${countryName}:`, error);
-        }
+        await loadCountryData(countryName);
       }
       
-      // Update globe with loaded data
       world.polygonsTransitionDuration(1000);
       world.polygonsData(countryFeatures);
+      updateEmojiMarkers();
+    }
+
+    async function loadCountryData(countryName) {
+      try {
+        const response = await fetch(`/get-country-data/?country=${encodeURIComponent(countryName)}`);
+        const data = await response.json();
+        
+        if (data.emotion_score !== undefined) {
+          countriesData[countryName] = data;
+        }
+      } catch (error) {
+        console.error('Error loading country data:', error);
+      }
     }
 
     function startBackgroundFetching() {
+      setInterval(async () => {
+        try {
+          const statusResponse = await fetch('/get-fetch-status/');
+          const statusData = await statusResponse.json();
+          
+          document.getElementById('currentCountry').textContent = statusData.next_country;
+          document.getElementById('currentSubreddit').textContent = 
+            statusData.next_subreddit ? `r/${statusData.next_subreddit}` : '';
+        } catch (error) {
+          console.error('Status update error:', error);
+        }
+      }, 2000);
+
       fetchInterval = setInterval(async () => {
         if (isFetching) return;
         
         isFetching = true;
         try {
           const response = await fetch('/fetch-next-country/');
-          const result = await response.json();
+          const data = await response.json();
           
-          if (result.status === 'success') {
-            // Update status display
-            document.getElementById('currentCountry').textContent = result.country;
-            document.getElementById('currentSubreddit').textContent = `r/${result.subreddit}`;
-            
-            console.log(`Fetched ${result.posts_fetched} posts for ${result.country}`);
-            
-            // Reload data for this country
-            const dataResponse = await fetch(`/get-country-data/?country=${encodeURIComponent(result.country)}`);
-            const data = await dataResponse.json();
-            
-            if (data.posts && data.posts.length > 0) {
-              countriesData[result.country] = data;
-              world.polygonsTransitionDuration(1000);
-              world.polygonsData(world.polygonsData());
-            }
-          } else if (result.status === 'error') {
-            // Update status to show error
-            document.getElementById('currentCountry').textContent = result.country || 'Error';
-            document.getElementById('currentSubreddit').textContent = result.error || 'Unknown error';
+          if (data.status === 'success') {
+            console.log(`Successfully fetched ${data.country} with emotion score: ${data.emotion_score}`);
+            await loadCountryData(data.country);
+            world.polygonsData(world.polygonsData());
+            updateEmojiMarkers();
+          } else if (data.status === 'rate_limited') {
+            console.log(`Rate limited, waiting ${data.wait_time}s`);
+          } else if (data.status === 'already_fetching') {
+            console.log('Already fetching another country');
           }
         } catch (error) {
           console.error('Fetch error:', error);
         } finally {
           isFetching = false;
         }
-      }, 1000); // Check every second
+      }, 2000);
     }
 
-    // Close popup when clicking outside
     document.addEventListener('click', (e) => {
       const popup = document.getElementById('countryPopup');
       if (e.target === popup) {
@@ -298,7 +368,6 @@
       }
     });
 
-    // Close popup with Escape key
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         closePopup();

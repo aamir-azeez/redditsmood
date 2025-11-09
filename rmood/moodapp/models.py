@@ -6,6 +6,7 @@ class Country(models.Model):
     subreddit = models.CharField(max_length=100)
     last_updated = models.DateTimeField(null=True, blank=True)
     post_count = models.IntegerField(default=0)
+    emotion_score = models.IntegerField(default=5)
     
     class Meta:
         ordering = ['last_updated']
@@ -35,7 +36,6 @@ class RedditPost(models.Model):
         return f"{self.title[:50]} - {self.country.name}"
 
 class FetchQueue(models.Model):
-    """Singleton model to track which country to fetch next"""
     last_fetch_time = models.DateTimeField(default=timezone.now)
     is_fetching = models.BooleanField(default=False)
     
