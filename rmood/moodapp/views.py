@@ -11,12 +11,12 @@ from pathlib import Path
 from datetime import timedelta, datetime
 import pytz
 import requests
-from .models import Country, RedditPost, FetchQueue, FetchStatus, UserMood
+from .models import Country, RedditPost, FetchQueue, FetchStatus, UserMood, UserComment
 
 def check_emotion(titles, country):
     api_key = settings.OPENROUTER_API_KEY
     all_titles = " ".join(titles)
-    prompt = f"ONLY GIVE ME ONE NUMBER BETWEEN 1 AND 10 THAT REPRESENTS THE OVERALL EMOTION OF THE FOLLOWING TEXTS: {all_titles} PLEASE STOP BEING NEUTRAL AND CHOOSING 5, CHOOSE OTHER NUMBERS TOO"
+    prompt = f"ONLY GIVE ME ONE NUMBER BETWEEN 1 AND 10 THAT REPRESENTS THE OVERALL EMOTION OF THE FOLLOWING TEXTS: {all_titles} PLEASE STOP BEING NEUTRAL AND CHOOSING 5, CHOOSE OTHER NUMBERS TOO YOU CAN ALSO CHOOSE DECIMALS LIKE 6.5 OR 7.2 IF YOU WANT TO BE MORE PRECISE"
 
     url = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -510,3 +510,109 @@ def submit_user_mood(request):
     except Exception as e:
         print(f"Error submitting user mood: {str(e)}")
         return JsonResponse({'status': 'error', 'error': str(e)}, status=500)
+
+@require_http_methods(["POST"])
+def submit_comment(request):
+    try:
+        data = json.loads(request.body)
+        country_name = data.get('country', '')
+        mood_score = data.get('mood')
+        comment_text = data.get('comment', '').strip()
+        
+        if not mood_score or not comment_text:
+            return JsonResponse({'status': 'error', 'error': 'Missing mood or comment'}, status=400)
+        
+        if not isinstance(mood_score, int) or mood_score < 1 or mood_score > 10:
+            return JsonResponse({'status': 'error', 'error': 'Mood must be between 1 and 10'}, status=400)
+        
+        if len(comment_text) > 500:
+            return JsonResponse({'status': 'error', 'error': 'Comment too long (max 500 characters)'}, status=400)
+        
+        # Get user's IP address
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip_address = x_forwarded_for.split(',')[0]
+        else:
+            ip_address = request.META.get('REMOTE_ADDR')
+        
+        # Check for rate limiting - 10 seconds between comment submissions
+        last_comment = UserComment.objects.filter(
+            ip_address=ip_address
+        ).order_by('-submitted_at').first()
+        
+        if last_comment:
+            time_since_last = (timezone.now() - last_comment.submitted_at).total_seconds()
+            if time_since_last < 10:
+                wait_time = 10 - time_since_last
+                return JsonResponse({
+                    'status': 'rate_limited',
+                    'error': f'Please wait {wait_time:.1f} more seconds before commenting again',
+                    'wait_time': wait_time
+                }, status=429)
+        
+        # Get country if provided
+        country = None
+        if country_name:
+            country, created = Country.objects.get_or_create(
+                name=country_name,
+                defaults={'subreddit': country_name.replace(' ', '').lower()}
+            )
+        
+        # Create comment
+        comment = UserComment.objects.create(
+            country=country,
+            mood_score=mood_score,
+            comment_text=comment_text,
+            ip_address=ip_address
+        )
+        
+        return JsonResponse({
+            'status': 'success',
+            'comment_id': comment.id,
+            'mood_score': mood_score,
+            'comment_text': comment_text,
+            'submitted_at': comment.submitted_at.isoformat()
+        })
+        
+    except Exception as e:
+        print(f"Error submitting comment: {str(e)}")
+        return JsonResponse({'status': 'error', 'error': str(e)}, status=500)
+
+@require_http_methods(["GET"])
+def get_comments(request):
+    try:
+        # Get the last 50 comments
+        comments = UserComment.objects.all()[:50]
+        
+        return JsonResponse({
+            'status': 'success',
+            'comments': [{
+                'id': comment.id,
+                'country': comment.country.name if comment.country else 'Global',
+                'mood_score': comment.mood_score,
+                'comment_text': comment.comment_text,
+                'submitted_at': comment.submitted_at.isoformat(),
+                'time_ago': get_time_ago(comment.submitted_at)
+            } for comment in comments]
+        })
+    except Exception as e:
+        print(f"Error getting comments: {str(e)}")
+        return JsonResponse({'status': 'error', 'error': str(e)}, status=500)
+
+def get_time_ago(dt):
+    """Helper function to get human-readable time difference"""
+    now = timezone.now()
+    diff = now - dt
+    
+    seconds = diff.total_seconds()
+    if seconds < 60:
+        return 'just now'
+    elif seconds < 3600:
+        minutes = int(seconds / 60)
+        return f'{minutes}m ago'
+    elif seconds < 86400:
+        hours = int(seconds / 3600)
+        return f'{hours}h ago'
+    else:
+        days = int(seconds / 86400)
+        return f'{days}d ago'

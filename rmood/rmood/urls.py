@@ -24,5 +24,7 @@ urlpatterns = [
     path('get-fetch-status/', views.get_fetch_status, name='get_fetch_status'),
     path('fetch-next-country/', views.fetch_next_country, name='fetch_next_country'),
     path('submit-user-mood/', views.submit_user_mood, name='submit_user_mood'),
+    path('submit-comment/', views.submit_comment, name='submit_comment'),
+    path('get-comments/', views.get_comments, name='get_comments'),
     path('', views.globe_countries, name='globe_countries'),
 ]

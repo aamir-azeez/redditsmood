@@ -81,29 +81,70 @@
       position: absolute;
       top: 260px;
       left: 20px;
-      background: rgba(0, 0, 0, 0.8);
+      background: rgba(0, 0, 0, 0.85);
       color: white;
-      padding: 15px 20px;
+      padding: 10px 15px;
       border-radius: 6px;
       z-index: 1000;
-      font-size: 14px;
-      min-width: 250px;
+      font-size: 13px;
+      width: 220px;
       border-left: 4px solid #9c27b0;
+      transition: all 0.3s ease;
+    }
+    #userMoodBox.collapsed {
+      padding: 8px 15px;
+    }
+    #userMoodBox .box-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #444;
+    }
+    #userMoodBox.collapsed .box-header {
+      margin-bottom: 0;
+      padding-bottom: 0;
+      border-bottom: none;
+    }
+    #userMoodBox .box-title {
+      color: #9c27b0;
+      font-weight: bold;
+      font-size: 14px;
+    }
+    #userMoodBox .toggle-icon {
+      color: #666;
+      font-size: 18px;
+      transition: transform 0.3s;
+    }
+    #userMoodBox.collapsed .toggle-icon {
+      transform: rotate(180deg);
+    }
+    #userMoodBox .box-content {
+      max-height: 500px;
+      overflow: hidden;
+      transition: max-height 0.3s ease, opacity 0.3s ease;
+      opacity: 1;
+    }
+    #userMoodBox.collapsed .box-content {
+      max-height: 0;
+      opacity: 0;
     }
     #userMoodBox .label {
       color: #999;
-      font-size: 12px;
-      margin-bottom: 8px;
+      font-size: 11px;
+      margin-bottom: 6px;
     }
     #userMoodBox select {
       width: 100%;
-      padding: 8px 12px;
-      margin-bottom: 10px;
+      padding: 6px 10px;
+      margin-bottom: 8px;
       background: rgba(255, 255, 255, 0.1);
       color: white;
       border: 1px solid #555;
       border-radius: 4px;
-      font-size: 14px;
+      font-size: 12px;
       cursor: pointer;
     }
     #userMoodBox select option {
@@ -112,12 +153,12 @@
     }
     #userMoodBox button {
       width: 100%;
-      padding: 10px;
+      padding: 8px;
       background: #9c27b0;
       color: white;
       border: none;
       border-radius: 4px;
-      font-size: 14px;
+      font-size: 12px;
       font-weight: bold;
       cursor: pointer;
       transition: background 0.3s;
@@ -131,8 +172,8 @@
     }
     #userMoodBox .success-message {
       color: #4caf50;
-      font-size: 12px;
-      margin-top: 8px;
+      font-size: 11px;
+      margin-top: 6px;
       display: none;
     }
     #worldRating {
@@ -179,6 +220,154 @@
       font-size: 20px;
       font-weight: bold;
       color: #9c27b0;
+    }
+    #chatBox {
+      position: absolute;
+      top: 20px;
+      right: 250px;
+      background: rgba(0, 0, 0, 0.9);
+      color: white;
+      padding: 10px 12px;
+      border-radius: 6px;
+      z-index: 1000;
+      width: 300px;
+      display: flex;
+      flex-direction: column;
+      border-left: 4px solid #00bcd4;
+      transition: all 0.3s ease;
+    }
+    #chatBox.collapsed {
+      padding: 8px 12px;
+    }
+    #chatBox .box-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      margin-bottom: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #444;
+    }
+    #chatBox.collapsed .box-header {
+      margin-bottom: 0;
+      padding-bottom: 0;
+      border-bottom: none;
+    }
+    #chatBox .box-title {
+      color: #00bcd4;
+      font-weight: bold;
+      font-size: 14px;
+    }
+    #chatBox .toggle-icon {
+      color: #666;
+      font-size: 18px;
+      transition: transform 0.3s;
+    }
+    #chatBox.collapsed .toggle-icon {
+      transform: rotate(180deg);
+    }
+    #chatBox .chat-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: max-height 0.3s ease, opacity 0.3s ease;
+      max-height: 400px;
+      opacity: 1;
+    }
+    #chatBox.collapsed .chat-content {
+      max-height: 0;
+      opacity: 0;
+    }
+    #chatBox .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      margin-bottom: 8px;
+      padding: 5px;
+      min-height: 200px;
+    }
+    #chatBox .chat-message {
+      margin-bottom: 10px;
+      padding: 6px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 4px;
+      border-left: 3px solid #00bcd4;
+    }
+    #chatBox .message-mood {
+      font-size: 16px;
+      display: inline-block;
+      margin-right: 6px;
+    }
+    #chatBox .message-country {
+      color: #00bcd4;
+      font-size: 10px;
+      font-weight: bold;
+    }
+    #chatBox .message-text {
+      color: #ddd;
+      font-size: 12px;
+      margin: 4px 0;
+      line-height: 1.3;
+    }
+    #chatBox .message-time {
+      color: #666;
+      font-size: 9px;
+    }
+    #chatBox .chat-input {
+      border-top: 1px solid #444;
+      padding-top: 8px;
+    }
+    #chatBox .chat-input select,
+    #chatBox .chat-input textarea,
+    #chatBox .chat-input button {
+      width: 100%;
+      margin-bottom: 6px;
+    }
+    #chatBox .chat-input select {
+      padding: 5px;
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+      border: 1px solid #555;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+    #chatBox .chat-input select option {
+      background: #222;
+    }
+    #chatBox .chat-input textarea {
+      padding: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+      border: 1px solid #555;
+      border-radius: 4px;
+      font-size: 12px;
+      resize: vertical;
+      min-height: 50px;
+      font-family: Arial, sans-serif;
+    }
+    #chatBox .chat-input button {
+      padding: 6px;
+      background: #00bcd4;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    #chatBox .chat-input button:hover {
+      background: #0097a7;
+    }
+    #chatBox .chat-input button:disabled {
+      background: #555;
+      cursor: not-allowed;
+    }
+    #chatBox .chat-error {
+      color: #ff4444;
+      font-size: 10px;
+      margin-top: 4px;
+      display: none;
     }
     #countryPopup {
       position: absolute;
@@ -262,25 +451,30 @@
   </div>
   
   <div id="userMoodBox">
-    <div class="label">Share Your Mood:</div>
-    <select id="countrySelect">
-      <option value="">Select your country...</option>
-    </select>
-    <select id="moodSelect">
-      <option value="">Select your mood...</option>
-      <option value="1">😭 Very Sad</option>
-      <option value="2">😢 Sad</option>
-      <option value="3">😟 Down</option>
-      <option value="4">😕 Meh</option>
-      <option value="5">😐 Neutral</option>
-      <option value="6">🙂 Okay</option>
-      <option value="7">😊 Good</option>
-      <option value="8">😄 Great</option>
-      <option value="9">😁 Devious</option>
-      <option value="10">😝 Silly</option>
-    </select>
-    <button id="submitMood" onclick="submitUserMood()">Submit Mood</button>
-    <div class="success-message" id="moodSuccess">✓ Mood submitted!</div>
+    <div class="box-header" onclick="toggleBox('userMoodBox')">
+      <div class="box-title">💜 Share Your Mood</div>
+      <div class="toggle-icon">▼</div>
+    </div>
+    <div class="box-content">
+      <select id="countrySelect">
+        <option value="">Select your country...</option>
+      </select>
+      <select id="moodSelect">
+        <option value="">Select your mood...</option>
+        <option value="1">😭 Very Sad</option>
+        <option value="2">😢 Sad</option>
+        <option value="3">😟 Down</option>
+        <option value="4">😕 Meh</option>
+        <option value="5">😐 Neutral</option>
+        <option value="6">🙂 Okay</option>
+        <option value="7">😊 Good</option>
+        <option value="8">😄 Great</option>
+        <option value="9">😁 Devious</option>
+        <option value="10">😝 Silly</option>
+      </select>
+      <button id="submitMood" onclick="submitUserMood()">Submit Mood</button>
+      <div class="success-message" id="moodSuccess">✓ Mood submitted!</div>
+    </div>
   </div>
   
   <div id="worldRating">
@@ -292,6 +486,39 @@
       <div class="label">User Happiness Average</div>
       <div class="user-rating" id="userWorldEmoji">⏳</div>
       <div class="user-score" id="userWorldScore">-</div>
+    </div>
+  </div>
+  
+  <div id="chatBox">
+    <div class="box-header" onclick="toggleBox('chatBox')">
+      <div class="box-title">💬 Global Feelings Chat</div>
+      <div class="toggle-icon">▼</div>
+    </div>
+    <div class="chat-content">
+      <div class="chat-messages" id="chatMessages">
+        <div style="color: #666; text-align: center; padding: 20px;">Loading comments...</div>
+      </div>
+      <div class="chat-input">
+        <select id="chatCountrySelect">
+          <option value="">Country (optional)</option>
+        </select>
+        <select id="chatMoodSelect">
+          <option value="">Select mood...</option>
+          <option value="1">😭 Very Sad</option>
+          <option value="2">😢 Sad</option>
+          <option value="3">😟 Down</option>
+          <option value="4">😕 Meh</option>
+          <option value="5">😐 Neutral</option>
+          <option value="6">🙂 Okay</option>
+          <option value="7">😊 Good</option>
+          <option value="8">😄 Great</option>
+          <option value="9">😁 Amazing</option>
+          <option value="10">🤩 Fantastic</option>
+        </select>
+        <textarea id="chatCommentText" placeholder="Share how you're feeling... (max 500 chars)" maxlength="500"></textarea>
+        <button id="submitComment" onclick="submitComment()">Send</button>
+        <div class="chat-error" id="chatError"></div>
+      </div>
     </div>
   </div>
   
@@ -330,6 +557,7 @@
     // Populate country dropdown
     function populateCountryDropdown() {
       const countrySelect = document.getElementById('countrySelect');
+      const chatCountrySelect = document.getElementById('chatCountrySelect');
       const countries = Object.keys(countrySubredditMapping).sort();
       
       countries.forEach(country => {
@@ -337,7 +565,20 @@
         option.value = country;
         option.textContent = country;
         countrySelect.appendChild(option);
+        
+        const chatOption = document.createElement('option');
+        chatOption.value = country;
+        chatOption.textContent = country;
+        chatCountrySelect.appendChild(chatOption);
       });
+    }
+
+    // Toggle box collapse/expand
+    function toggleBox(boxId) {
+      const box = document.getElementById(boxId);
+      if (box) {
+        box.classList.toggle('collapsed');
+      }
     }
 
     // Submit user mood
@@ -403,6 +644,110 @@
         submitButton.disabled = false;
         submitButton.textContent = 'Submit Mood';
       }
+    }
+
+    // Submit comment
+    async function submitComment() {
+      const countrySelect = document.getElementById('chatCountrySelect');
+      const moodSelect = document.getElementById('chatMoodSelect');
+      const commentText = document.getElementById('chatCommentText');
+      const submitButton = document.getElementById('submitComment');
+      const errorMessage = document.getElementById('chatError');
+      
+      const country = countrySelect.value;
+      const mood = moodSelect.value;
+      const comment = commentText.value.trim();
+      
+      errorMessage.style.display = 'none';
+      
+      if (!mood || !comment) {
+        errorMessage.textContent = 'Please select a mood and write a comment';
+        errorMessage.style.display = 'block';
+        return;
+      }
+      
+      submitButton.disabled = true;
+      submitButton.textContent = 'Sending...';
+      
+      try {
+        const response = await fetch('/submit-comment/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrftoken
+          },
+          body: JSON.stringify({
+            country: country,
+            mood: parseInt(mood),
+            comment: comment
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+          commentText.value = '';
+          moodSelect.value = '';
+          countrySelect.value = '';
+          await loadComments();
+        } else if (data.status === 'rate_limited') {
+          errorMessage.textContent = data.error;
+          errorMessage.style.display = 'block';
+        } else {
+          errorMessage.textContent = data.error || 'Error submitting comment';
+          errorMessage.style.display = 'block';
+        }
+      } catch (error) {
+        console.error('Error submitting comment:', error);
+        errorMessage.textContent = 'Network error';
+        errorMessage.style.display = 'block';
+      } finally {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Send';
+      }
+    }
+
+    // Load comments
+    async function loadComments() {
+      try {
+        const response = await fetch('/get-comments/');
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+          const messagesDiv = document.getElementById('chatMessages');
+          
+          if (data.comments.length === 0) {
+            messagesDiv.innerHTML = '<div style="color: #666; text-align: center; padding: 20px;">No comments yet. Be the first!</div>';
+            return;
+          }
+          
+          messagesDiv.innerHTML = data.comments.map(comment => {
+            const emoji = getEmoji(comment.mood_score);
+            return `
+              <div class="chat-message">
+                <div>
+                  <span class="message-mood">${emoji}</span>
+                  <span class="message-country">${comment.country}</span>
+                  <span class="message-time">${comment.time_ago}</span>
+                </div>
+                <div class="message-text">${escapeHtml(comment.comment_text)}</div>
+              </div>
+            `;
+          }).join('');
+          
+          // Auto-scroll to bottom
+          messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+      } catch (error) {
+        console.error('Error loading comments:', error);
+      }
+    }
+
+    // Helper function to escape HTML
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
     }
 
     function getEmoji(score) {
@@ -618,6 +963,12 @@
 
       // Populate the country dropdown
       populateCountryDropdown();
+
+      // Load initial comments
+      loadComments();
+      
+      // Refresh comments every 10 seconds
+      setInterval(loadComments, 10000);
 
       loadAllCountriesData(countryFeatures);
 

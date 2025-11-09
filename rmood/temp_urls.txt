@@ -1,0 +1,2 @@
+    path('submit-comment/', views.submit_comment, name='submit_comment'),
+    path('get-comments/', views.get_comments, name='get_comments'),

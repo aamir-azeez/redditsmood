@@ -66,3 +66,19 @@ class UserMood(models.Model):
     
     def __str__(self):
         return f"{self.country.name} - Mood: {self.mood_score}/10"
+
+class UserComment(models.Model):
+    country = models.ForeignKey(Country, on_delete=models.CASCADE, related_name='user_comments', null=True, blank=True)
+    mood_score = models.IntegerField()  # 1-10
+    comment_text = models.TextField(max_length=500)
+    ip_address = models.GenericIPAddressField()
+    submitted_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-submitted_at']
+        indexes = [
+            models.Index(fields=['-submitted_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.mood_score}/10 - {self.comment_text[:50]}"
