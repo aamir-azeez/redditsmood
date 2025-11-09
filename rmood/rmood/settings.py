@@ -118,6 +118,9 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# Directory where `collectstatic` will gather static files
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
 # Reddit API Configuration
 REDDIT_CLIENT_ID = '***REMOVED***'
 REDDIT_CLIENT_SECRET = '***REMOVED***'

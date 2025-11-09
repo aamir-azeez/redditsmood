@@ -21,4 +21,5 @@ from moodapp import views
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('dubai/', views.dubai_posts, name='dubai_posts'),
+    path('countries/', views.countries_posts, name='countries_posts'),
 ]
