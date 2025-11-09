@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Reddit Posts Globe</title>
+  <style>
+    body { 
+      margin: 0; 
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+    }
+    #globeViz {
+      width: 100vw;
+      height: 100vh;
+    }
+    #statusBox {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 15px 20px;
+      border-radius: 6px;
+      z-index: 1000;
+      font-size: 14px;
+      min-width: 250px;
+    }
+    #statusBox .label {
+      color: #999;
+      font-size: 12px;
+      margin-bottom: 5px;
+    }
+    #statusBox .country-name {
+      font-size: 16px;
+      font-weight: bold;
+      color: #ff4500;
+    }
+    #statusBox .subreddit {
+      color: #4a9eff;
+      font-size: 13px;
+      margin-top: 3px;
+    }
+    #countryPopup {
+      position: absolute;
+      display: none;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.95);
+      color: white;
+      padding: 20px;
+      border-radius: 10px;
+      max-width: 600px;
+      max-height: 70vh;
+      overflow-y: auto;
+      z-index: 2000;
+      box-shadow: 0 10px 50px rgba(0,0,0,0.5);
+    }
+    #countryPopup h2 {
+      margin: 0 0 10px 0;
+      color: #ff4500;
+    }
+    #countryPopup .close {
+      position: absolute;
+      top: 15px;
+      right: 20px;
+      font-size: 28px;
+      cursor: pointer;
+      color: #999;
+    }
+    #countryPopup .close:hover {
+      color: #fff;
+    }
+    #countryPopup .meta {
+      color: #999;
+      margin-bottom: 15px;
+      font-size: 14px;
+    }
+    #countryPopup .post {
+      margin: 10px 0;
+      padding: 10px 0;
+      border-top: 1px solid #333;
+    }
+    #countryPopup .post:first-of-type {
+      border-top: none;
+    }
+    #countryPopup .post a {
+      color: #4a9eff;
+      text-decoration: none;
+      font-weight: 500;
+    }
+    #countryPopup .post a:hover {
+      text-decoration: underline;
+    }
+    #countryPopup .post-meta {
+      color: #999;
+      font-size: 12px;
+      margin-top: 5px;
+    }
+  </style>
+
+  <script src="https://cdn.jsdelivr.net/npm/globe.gl"></script>
+</head>
+
+<body>
+  <div id="globeViz"></div>
+  
+  <div id="statusBox">
+    <div class="label">Currently updating:</div>
+    <div class="country-name" id="currentCountry">Initializing...</div>
+    <div class="subreddit" id="currentSubreddit"></div>
+  </div>
+  
+  <div id="countryPopup">
+    <span class="close" onclick="closePopup()">&times;</span>
+    <div id="popupContent"></div>
+  </div>
+
+  <script>
+    // Country to subreddit mapping from Django
+    const countrySubredditMapping = {{ country_subreddit_mapping|safe }};
+    
+    // Store fetched data
+    const countriesData = {};
+    let selectedCountry = null;
+    let isFetching = false;
+    let fetchInterval = null;
+
+    // Initialize Globe
+    const world = new Globe(document.getElementById('globeViz'))
+      .globeImageUrl('/static/earth-blue-marble.jpg')
+      .backgroundColor('#000000')
+      .polygonCapColor(feat => {
+        const countryName = feat.properties.ADMIN;
+        if (selectedCountry === countryName) {
+          return 'rgba(255, 165, 0, 0.9)';
+        }
+        return countriesData[countryName] ? 'rgba(255, 69, 0, 0.7)' : 'rgba(100, 100, 100, 0.3)';
+      })
+      .polygonSideColor(() => 'rgba(0, 0, 0, 0.1)')
+      .polygonStrokeColor(() => '#111')
+      .polygonAltitude(feat => {
+        const countryName = feat.properties.ADMIN;
+        if (selectedCountry === countryName) {
+          return 0.05; // Raise selected country
+        }
+        return countriesData[countryName] ? 0.01 : 0.005;
+      })
+      .onPolygonClick(handlePolygonClick);
+
+    // Auto-rotate
+    world.controls().autoRotate = true;
+    world.controls().autoRotateSpeed = 0.5;
+
+    function handlePolygonClick(polygon) {
+      if (!polygon) return;
+      
+      const countryName = polygon.properties.ADMIN;
+      selectedCountry = countryName;
+      
+      // Stop auto-rotation
+      world.controls().autoRotate = false;
+      
+      // Elevate the polygon
+      world.polygonsTransitionDuration(500);
+      world.polygonsData(world.polygonsData());
+      
+      // Show popup with posts
+      showCountryPopup(countryName);
+    }
+
+    function closePopup() {
+      document.getElementById('countryPopup').style.display = 'none';
+      selectedCountry = null;
+      
+      // Resume auto-rotation
+      world.controls().autoRotate = true;
+      
+      // Lower the polygon
+      world.polygonsTransitionDuration(500);
+      world.polygonsData(world.polygonsData());
+    }
+
+    async function showCountryPopup(countryName) {
+      const popup = document.getElementById('countryPopup');
+      const content = document.getElementById('popupContent');
+      
+      popup.style.display = 'block';
+      content.innerHTML = '<div style="text-align: center;">Loading...</div>';
+      
+      try {
+        const response = await fetch(`/get-country-data/?country=${encodeURIComponent(countryName)}`);
+        const data = await response.json();
+        
+        let html = `<h2>${countryName}</h2>`;
+        html += `<div class="meta">r/${data.subreddit}`;
+        if (data.count > 0) {
+          html += ` • ${data.count} posts`;
+        }
+        if (data.last_updated) {
+          html += ` • Updated: ${new Date(data.last_updated).toLocaleString()}`;
+        }
+        html += `</div>`;
+        
+        if (data.posts.length === 0) {
+          html += '<div style="color: #999; font-style: italic;">No posts found yet. Data is being fetched...</div>';
+        } else {
+          data.posts.forEach(post => {
+            html += `<div class="post">`;
+            html += `<a href="${post.permalink}" target="_blank">${post.title}</a>`;
+            html += `<div class="post-meta">⬆️ ${post.score} • 💬 ${post.num_comments} • by u/${post.author}</div>`;
+            html += `</div>`;
+          });
+        }
+        
+        content.innerHTML = html;
+      } catch (error) {
+        content.innerHTML = '<div style="color: #b00020;">Error loading data</div>';
+        console.error('Error:', error);
+      }
+    }
+
+    // Load GeoJSON and setup
+    fetch('/static/ne_110m_admin_0_countries.geojson').then(res => res.json()).then(countries => {
+      const countryFeatures = countries.features.filter(d => d.properties.ISO_A2 !== 'AQ');
+      world.polygonsData(countryFeatures);
+
+      // Load existing data from database for all countries
+      loadAllCountriesData(countryFeatures);
+
+      // Start background fetching (1 country per second)
+      startBackgroundFetching();
+    });
+
+    async function loadAllCountriesData(countryFeatures) {
+      for (const feat of countryFeatures) {
+        const countryName = feat.properties.ADMIN;
+        try {
+          const response = await fetch(`/get-country-data/?country=${encodeURIComponent(countryName)}`);
+          const data = await response.json();
+          
+          if (data.posts && data.posts.length > 0) {
+            countriesData[countryName] = data;
+          }
+        } catch (error) {
+          console.error(`Error loading ${countryName}:`, error);
+        }
+      }
+      
+      // Update globe with loaded data
+      world.polygonsTransitionDuration(1000);
+      world.polygonsData(countryFeatures);
+    }
+
+    function startBackgroundFetching() {
+      fetchInterval = setInterval(async () => {
+        if (isFetching) return;
+        
+        isFetching = true;
+        try {
+          const response = await fetch('/fetch-next-country/');
+          const result = await response.json();
+          
+          if (result.status === 'success') {
+            // Update status display
+            document.getElementById('currentCountry').textContent = result.country;
+            document.getElementById('currentSubreddit').textContent = `r/${result.subreddit}`;
+            
+            console.log(`Fetched ${result.posts_fetched} posts for ${result.country}`);
+            
+            // Reload data for this country
+            const dataResponse = await fetch(`/get-country-data/?country=${encodeURIComponent(result.country)}`);
+            const data = await dataResponse.json();
+            
+            if (data.posts && data.posts.length > 0) {
+              countriesData[result.country] = data;
+              world.polygonsTransitionDuration(1000);
+              world.polygonsData(world.polygonsData());
+            }
+          } else if (result.status === 'error') {
+            // Update status to show error
+            document.getElementById('currentCountry').textContent = result.country || 'Error';
+            document.getElementById('currentSubreddit').textContent = result.error || 'Unknown error';
+          }
+        } catch (error) {
+          console.error('Fetch error:', error);
+        } finally {
+          isFetching = false;
+        }
+      }, 1000); // Check every second
+    }
+
+    // Close popup when clicking outside
+    document.addEventListener('click', (e) => {
+      const popup = document.getElementById('countryPopup');
+      if (e.target === popup) {
+        closePopup();
+      }
+    });
+
+    // Close popup with Escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closePopup();
+      }
+    });
+  </script>
+</body>
+</html>

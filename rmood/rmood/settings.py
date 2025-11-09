@@ -121,6 +121,11 @@ STATIC_URL = 'static/'
 # Directory where `collectstatic` will gather static files
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
+# Additional directories for static files
+STATICFILES_DIRS = [
+    BASE_DIR / 'moodapp' / 'templates',
+]
+
 # Reddit API Configuration
 REDDIT_CLIENT_ID = '***REMOVED***'
 REDDIT_CLIENT_SECRET = '***REMOVED***'
