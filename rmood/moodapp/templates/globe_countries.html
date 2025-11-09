@@ -162,6 +162,24 @@
       font-weight: bold;
       color: #ff4500;
     }
+    #worldRating .separator {
+      border-top: 1px solid #444;
+      margin: 15px 0;
+    }
+    #worldRating .user-section {
+      margin-top: 15px;
+      padding-top: 15px;
+      border-top: 1px solid #444;
+    }
+    #worldRating .user-rating {
+      font-size: 32px;
+      margin: 8px 0;
+    }
+    #worldRating .user-score {
+      font-size: 20px;
+      font-weight: bold;
+      color: #9c27b0;
+    }
     #countryPopup {
       position: absolute;
       display: none;
@@ -266,9 +284,15 @@
   </div>
   
   <div id="worldRating">
-    <div class="label">World Average Mood</div>
+    <div class="label">Reddit Mood Average</div>
     <div class="rating" id="worldEmoji">😐</div>
     <div class="score" id="worldScore">5.0/10</div>
+    
+    <div class="user-section">
+      <div class="label">User Happiness Average</div>
+      <div class="user-rating" id="userWorldEmoji">⏳</div>
+      <div class="user-score" id="userWorldScore">-</div>
+    </div>
   </div>
   
   <div id="countryPopup">
@@ -396,6 +420,7 @@
     }
 
     function updateWorldRating() {
+      // Update Reddit mood average
       const scores = Object.values(countriesData)
         .filter(d => d.emotion_score !== undefined)
         .map(d => d.emotion_score);
@@ -403,12 +428,33 @@
       if (scores.length === 0) {
         document.getElementById('worldEmoji').textContent = '😐';
         document.getElementById('worldScore').textContent = '5.0/10';
-        return;
+      } else {
+        const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+        document.getElementById('worldEmoji').textContent = getEmoji(avgScore);
+        document.getElementById('worldScore').textContent = `${avgScore.toFixed(1)}/10`;
       }
       
-      const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
-      document.getElementById('worldEmoji').textContent = getEmoji(avgScore);
-      document.getElementById('worldScore').textContent = `${avgScore.toFixed(1)}/10`;
+      // Update User Happiness average
+      const userMoodScores = [];
+      const userMoodCounts = [];
+      
+      Object.values(countriesData).forEach(d => {
+        if (d.user_mood_avg !== undefined && d.user_mood_avg !== null && d.user_mood_count > 0) {
+          // Weight each country's average by the number of submissions
+          for (let i = 0; i < d.user_mood_count; i++) {
+            userMoodScores.push(d.user_mood_avg);
+          }
+        }
+      });
+      
+      if (userMoodScores.length === 0) {
+        document.getElementById('userWorldEmoji').textContent = '⏳';
+        document.getElementById('userWorldScore').textContent = 'No data yet';
+      } else {
+        const userAvgScore = userMoodScores.reduce((a, b) => a + b, 0) / userMoodScores.length;
+        document.getElementById('userWorldEmoji').textContent = getEmoji(userAvgScore);
+        document.getElementById('userWorldScore').textContent = `${userAvgScore.toFixed(1)}/10`;
+      }
     }
 
     function hasCountryData(countryName) {

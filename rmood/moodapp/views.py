@@ -16,7 +16,7 @@ from .models import Country, RedditPost, FetchQueue, FetchStatus, UserMood
 def check_emotion(titles, country):
     api_key = settings.OPENROUTER_API_KEY
     all_titles = " ".join(titles)
-    prompt = f"ONLY GIVE ME ONE NUMBER BETWEEN 1 AND 10 THAT REPRESENTS THE OVERALL EMOTION OF THE FOLLOWING TEXTS: {all_titles}"
+    prompt = f"ONLY GIVE ME ONE NUMBER BETWEEN 1 AND 10 THAT REPRESENTS THE OVERALL EMOTION OF THE FOLLOWING TEXTS: {all_titles} PLEASE STOP BEING NEUTRAL AND CHOOSING 5, CHOOSE OTHER NUMBERS TOO"
 
     url = "https://openrouter.ai/api/v1/chat/completions"
 
