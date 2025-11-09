@@ -50,3 +50,19 @@ class FetchStatus(models.Model):
     
     class Meta:
         verbose_name_plural = "Fetch statuses"
+
+class UserMood(models.Model):
+    country = models.ForeignKey(Country, on_delete=models.CASCADE, related_name='user_moods')
+    mood_score = models.IntegerField()  # 1-10
+    ip_address = models.GenericIPAddressField()  # To prevent duplicate submissions
+    submitted_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-submitted_at']
+        indexes = [
+            models.Index(fields=['country', '-submitted_at']),
+            models.Index(fields=['ip_address', 'country', '-submitted_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.country.name} - Mood: {self.mood_score}/10"

@@ -3,14 +3,15 @@ from django.shortcuts import render
 from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
-from django.db.models import Count
+from django.db.models import Count, Avg
 import json
 from pathlib import Path
 from datetime import timedelta, datetime
 import pytz
 import requests
-from .models import Country, RedditPost, FetchQueue, FetchStatus
+from .models import Country, RedditPost, FetchQueue, FetchStatus, UserMood
 
 def check_emotion(titles, country):
     api_key = settings.OPENROUTER_API_KEY
@@ -239,6 +240,11 @@ def get_country_data(request):
         country = Country.objects.get(name=country_name)
         posts = country.posts.all()[:50]
         
+        # Get user mood statistics
+        user_moods = country.user_moods.all()
+        user_mood_avg = user_moods.aggregate(Avg('mood_score'))['mood_score__avg']
+        user_mood_count = user_moods.count()
+        
         return JsonResponse({
             'country': country.name,
             'subreddit': country.subreddit,
@@ -252,6 +258,8 @@ def get_country_data(request):
             'count': posts.count(),
             'last_updated': country.last_updated.isoformat() if country.last_updated else None,
             'emotion_score': country.emotion_score,
+            'user_mood_avg': round(user_mood_avg, 1) if user_mood_avg else None,
+            'user_mood_count': user_mood_count,
         })
     except Country.DoesNotExist:
         return JsonResponse({
@@ -261,6 +269,8 @@ def get_country_data(request):
             'count': 0,
             'last_updated': None,
             'emotion_score': 5,
+            'user_mood_avg': None,
+            'user_mood_count': 0,
         })
 
 @require_http_methods(["GET"])
@@ -297,7 +307,7 @@ def fetch_next_country(request):
             time_since_last_fetch = (now - fetch_queue.last_fetch_time).total_seconds()
             
             # Enforce minimum 3 second delay between fetches to avoid rate limits
-            min_delay = 3.5
+            min_delay = 3.0
             if time_since_last_fetch < min_delay:
                 return JsonResponse({
                     'status': 'rate_limited',
@@ -430,3 +440,73 @@ def fetch_next_country(request):
             'status': 'error',
             'error': str(e)
         })
+@require_http_methods(["POST"])
+def submit_user_mood(request):
+    try:
+        data = json.loads(request.body)
+        country_name = data.get('country')
+        mood_score = data.get('mood')
+        
+        if not country_name or not mood_score:
+            return JsonResponse({'status': 'error', 'error': 'Missing country or mood'}, status=400)
+        
+        if not isinstance(mood_score, int) or mood_score < 1 or mood_score > 10:
+            return JsonResponse({'status': 'error', 'error': 'Mood must be between 1 and 10'}, status=400)
+        
+        # Get user's IP address
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip_address = x_forwarded_for.split(',')[0]
+        else:
+            ip_address = request.META.get('REMOTE_ADDR')
+        
+        # Check for rate limiting - 5 seconds between ANY submissions from same IP
+        last_submission = UserMood.objects.filter(
+            ip_address=ip_address
+        ).order_by('-submitted_at').first()
+        
+        if last_submission:
+            time_since_last = (timezone.now() - last_submission.submitted_at).total_seconds()
+            if time_since_last < 5:
+                wait_time = 5 - time_since_last
+                return JsonResponse({
+                    'status': 'rate_limited',
+                    'error': f'Please wait {wait_time:.1f} more seconds before submitting again',
+                    'wait_time': wait_time
+                }, status=429)
+        
+        country, created = Country.objects.get_or_create(
+            name=country_name,
+            defaults={'subreddit': country_name.replace(' ', '').lower()}
+        )
+        
+        # Check if user has submitted mood for this country recently (within 24 hours)
+        recent_submission = UserMood.objects.filter(
+            country=country,
+            ip_address=ip_address,
+            submitted_at__gte=timezone.now() - timedelta(hours=24)
+        ).first()
+        
+        if recent_submission:
+            # Update existing submission
+            recent_submission.mood_score = mood_score
+            recent_submission.submitted_at = timezone.now()
+            recent_submission.save()
+        else:
+            # Create new submission
+            UserMood.objects.create(country=country, mood_score=mood_score, ip_address=ip_address)
+        
+        user_moods = country.user_moods.all()
+        user_mood_avg = user_moods.aggregate(Avg('mood_score'))['mood_score__avg']
+        user_mood_count = user_moods.count()
+        
+        return JsonResponse({
+            'status': 'success',
+            'country': country.name,
+            'mood_score': mood_score,
+            'user_mood_avg': round(user_mood_avg, 1) if user_mood_avg else None,
+            'user_mood_count': user_mood_count,
+        })
+    except Exception as e:
+        print(f"Error submitting user mood: {str(e)}")
+        return JsonResponse({'status': 'error', 'error': str(e)}, status=500)

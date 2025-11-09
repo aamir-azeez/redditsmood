@@ -23,5 +23,6 @@ urlpatterns = [
     path('get-country-data/', views.get_country_data, name='get_country_data'),
     path('get-fetch-status/', views.get_fetch_status, name='get_fetch_status'),
     path('fetch-next-country/', views.fetch_next_country, name='fetch_next_country'),
+    path('submit-user-mood/', views.submit_user_mood, name='submit_user_mood'),
     path('', views.globe_countries, name='globe_countries'),
 ]

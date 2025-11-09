@@ -77,6 +77,64 @@
       font-weight: bold;
       color: #ff4500;
     }
+    #userMoodBox {
+      position: absolute;
+      top: 260px;
+      left: 20px;
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 15px 20px;
+      border-radius: 6px;
+      z-index: 1000;
+      font-size: 14px;
+      min-width: 250px;
+      border-left: 4px solid #9c27b0;
+    }
+    #userMoodBox .label {
+      color: #999;
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+    #userMoodBox select {
+      width: 100%;
+      padding: 8px 12px;
+      margin-bottom: 10px;
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+      border: 1px solid #555;
+      border-radius: 4px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    #userMoodBox select option {
+      background: #222;
+      color: white;
+    }
+    #userMoodBox button {
+      width: 100%;
+      padding: 10px;
+      background: #9c27b0;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    #userMoodBox button:hover {
+      background: #7b1fa2;
+    }
+    #userMoodBox button:disabled {
+      background: #555;
+      cursor: not-allowed;
+    }
+    #userMoodBox .success-message {
+      color: #4caf50;
+      font-size: 12px;
+      margin-top: 8px;
+      display: none;
+    }
     #worldRating {
       position: absolute;
       top: 20px;
@@ -185,6 +243,28 @@
     </div>
   </div>
   
+  <div id="userMoodBox">
+    <div class="label">Share Your Mood:</div>
+    <select id="countrySelect">
+      <option value="">Select your country...</option>
+    </select>
+    <select id="moodSelect">
+      <option value="">Select your mood...</option>
+      <option value="1">😭 Very Sad</option>
+      <option value="2">😢 Sad</option>
+      <option value="3">😟 Down</option>
+      <option value="4">😕 Meh</option>
+      <option value="5">😐 Neutral</option>
+      <option value="6">🙂 Okay</option>
+      <option value="7">😊 Good</option>
+      <option value="8">😄 Great</option>
+      <option value="9">😁 Devious</option>
+      <option value="10">😝 Silly</option>
+    </select>
+    <button id="submitMood" onclick="submitUserMood()">Submit Mood</button>
+    <div class="success-message" id="moodSuccess">✓ Mood submitted!</div>
+  </div>
+  
   <div id="worldRating">
     <div class="label">World Average Mood</div>
     <div class="rating" id="worldEmoji">😐</div>
@@ -223,11 +303,95 @@
 
     const csrftoken = getCookie('csrftoken') || document.querySelector('[name=csrfmiddlewaretoken]')?.value;
 
+    // Populate country dropdown
+    function populateCountryDropdown() {
+      const countrySelect = document.getElementById('countrySelect');
+      const countries = Object.keys(countrySubredditMapping).sort();
+      
+      countries.forEach(country => {
+        const option = document.createElement('option');
+        option.value = country;
+        option.textContent = country;
+        countrySelect.appendChild(option);
+      });
+    }
+
+    // Submit user mood
+    async function submitUserMood() {
+      const countrySelect = document.getElementById('countrySelect');
+      const moodSelect = document.getElementById('moodSelect');
+      const submitButton = document.getElementById('submitMood');
+      const successMessage = document.getElementById('moodSuccess');
+      
+      const country = countrySelect.value;
+      const mood = moodSelect.value;
+      
+      if (!country || !mood) {
+        alert('Please select both country and mood');
+        return;
+      }
+      
+      submitButton.disabled = true;
+      submitButton.textContent = 'Submitting...';
+      
+      try {
+        const response = await fetch('/submit-user-mood/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrftoken
+          },
+          body: JSON.stringify({
+            country: country,
+            mood: parseInt(mood)
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+          successMessage.textContent = '✓ Mood submitted!';
+          successMessage.style.color = '#4caf50';
+          successMessage.style.display = 'block';
+          setTimeout(() => {
+            successMessage.style.display = 'none';
+          }, 3000);
+          
+          // Reload country data to show updated user mood
+          await loadCountryData(country);
+          world.polygonsData(world.polygonsData());
+          updateEmojiMarkers();
+        } else if (data.status === 'rate_limited') {
+          // Handle rate limiting
+          successMessage.textContent = `⏱ ${data.error}`;
+          successMessage.style.color = '#ff9800';
+          successMessage.style.display = 'block';
+          setTimeout(() => {
+            successMessage.style.display = 'none';
+          }, 5000);
+        } else {
+          alert('Error submitting mood: ' + (data.error || 'Unknown error'));
+        }
+      } catch (error) {
+        console.error('Error submitting mood:', error);
+        alert('Network error submitting mood');
+      } finally {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Submit Mood';
+      }
+    }
+
     function getEmoji(score) {
-      if (score <= 2) return '😭';
-      if (score <= 4) return '😟';
-      if (score <= 6) return '😐';
-      if (score <= 8) return '🙂';
+      if (score <= 1) return '😭';
+      if (score <= 2) return '😢';
+      if (score <= 3) return '😟';
+      if (score <= 4) return '😕';
+      if (score <= 5) return '😐';
+      if (score <= 6) return '🙂';
+      if (score <= 7) return '😊';
+      if (score <= 8) return '😄';
+      if (score <= 9) return '😁';
+      if (score <= 10) return '🤩';
       return '😊';
     }
 
@@ -374,6 +538,14 @@
         let html = `<h2>${emoji} ${countryName}</h2>`;
         html += `<div class="meta">r/${data.subreddit} - Emotion Score: ${data.emotion_score}/10 - ${data.count} posts</div>`;
         
+        // Add user mood section if available
+        if (data.user_mood_count > 0) {
+          const userMoodEmoji = getEmoji(data.user_mood_avg);
+          html += `<div class="meta" style="color: #9c27b0; margin-top: 10px;">
+            👥 User Moods: ${userMoodEmoji} ${data.user_mood_avg}/10 (${data.user_mood_count} ${data.user_mood_count === 1 ? 'person' : 'people'})
+          </div>`;
+        }
+        
         if (data.posts && data.posts.length > 0) {
           data.posts.forEach(post => {
             html += `
@@ -394,10 +566,12 @@
         content.innerHTML = '<div style="color: #ff4444;">Error loading data</div>';
       }
     }
-
     fetch('/static/ne_110m_admin_0_countries.geojson').then(res => res.json()).then(countries => {
       const countryFeatures = countries.features.filter(d => d.properties.ISO_A2 !== 'AQ');
       world.polygonsData(countryFeatures);
+
+      // Populate the country dropdown
+      populateCountryDropdown();
 
       loadAllCountriesData(countryFeatures);
 
