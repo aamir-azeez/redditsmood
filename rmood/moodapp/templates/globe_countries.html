@@ -40,6 +40,33 @@
       font-size: 13px;
       margin-top: 3px;
     }
+    #worldRating {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 15px 20px;
+      border-radius: 6px;
+      z-index: 1000;
+      font-size: 14px;
+      min-width: 200px;
+      text-align: center;
+    }
+    #worldRating .label {
+      color: #999;
+      font-size: 12px;
+      margin-bottom: 5px;
+    }
+    #worldRating .rating {
+      font-size: 36px;
+      margin: 10px 0;
+    }
+    #worldRating .score {
+      font-size: 24px;
+      font-weight: bold;
+      color: #ff4500;
+    }
     #countryPopup {
       position: absolute;
       display: none;
@@ -97,10 +124,6 @@
       font-size: 12px;
       margin-top: 5px;
     }
-    .country-emoji {
-      pointer-events: none;
-      transition: font-size 0.3s;
-    }
   </style>
 
   <script src="https://cdn.jsdelivr.net/npm/globe.gl"></script>
@@ -116,6 +139,12 @@
     <div class="subreddit" id="currentSubreddit"></div>
   </div>
   
+  <div id="worldRating">
+    <div class="label">World Average Mood</div>
+    <div class="rating" id="worldEmoji">😐</div>
+    <div class="score" id="worldScore">5.0/10</div>
+  </div>
+  
   <div id="countryPopup">
     <span class="close" onclick="closePopup()">&times;</span>
     <div id="popupContent"></div>
@@ -129,6 +158,7 @@
     let selectedCountry = null;
     let isFetching = false;
     let fetchInterval = null;
+    let currentHoveredCountry = null;
 
     function getCookie(name) {
       let cookieValue = null;
@@ -155,6 +185,28 @@
       return '😊';
     }
 
+    function updateWorldRating() {
+      const scores = Object.values(countriesData)
+        .filter(d => d.emotion_score !== undefined)
+        .map(d => d.emotion_score);
+      
+      if (scores.length === 0) {
+        document.getElementById('worldEmoji').textContent = '😐';
+        document.getElementById('worldScore').textContent = '5.0/10';
+        return;
+      }
+      
+      const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+      document.getElementById('worldEmoji').textContent = getEmoji(avgScore);
+      document.getElementById('worldScore').textContent = `${avgScore.toFixed(1)}/10`;
+    }
+
+    function hasCountryData(countryName) {
+      return countriesData[countryName] && 
+             countriesData[countryName].emotion_score !== undefined && 
+             countrySubredditMapping[countryName];
+    }
+
     const world = new Globe(document.getElementById('globeViz'))
       .globeImageUrl('//unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
       .backgroundColor('#000000')
@@ -163,7 +215,11 @@
         if (selectedCountry === countryName) {
           return 'rgba(255, 215, 0, 0.9)';
         }
-        return countriesData[countryName] ? 'rgba(255, 69, 0, 0.7)' : 'rgba(100, 100, 100, 0.3)';
+        // Only highlight if country has data
+        if (hasCountryData(countryName)) {
+          return 'rgba(255, 69, 0, 0.7)';
+        }
+        return 'rgba(100, 100, 100, 0.3)';
       })
       .polygonSideColor(() => 'rgba(0, 0, 0, 0.1)')
       .polygonStrokeColor(() => '#111')
@@ -172,14 +228,21 @@
         if (selectedCountry === countryName) {
           return 0.02;
         }
-        return countriesData[countryName] ? 0.01 : 0.005;
+        // Only raise if country has data
+        if (hasCountryData(countryName)) {
+          return 0.01;
+        }
+        return 0.005;
       })
       .onPolygonHover(handlePolygonHover)
       .onPolygonClick(handlePolygonClick)
       .htmlElementsData([])
       .htmlElement(d => {
         const el = document.createElement('div');
-        el.innerHTML = `<div class="country-emoji" style="font-size: ${d.hover ? '48px' : '32px'}">${getEmoji(d.score)}</div>`;
+        const isHovered = d.name === currentHoveredCountry;
+        const fontSize = isHovered ? '48px' : '32px';
+        const altitude = isHovered ? '50px' : '0px';
+        el.innerHTML = `<div style="font-size: ${fontSize}; transform: translateY(-${altitude}); transition: all 0.3s ease; pointer-events: none;">${getEmoji(d.score)}</div>`;
         el.style.color = 'white';
         el.style.pointerEvents = 'none';
         return el;
@@ -190,41 +253,35 @@
 
     function updateEmojiMarkers() {
       const markers = Object.keys(countriesData)
-        .filter(name => {
-          return countriesData[name] && 
-                 countriesData[name].emotion_score !== undefined && 
-                 countryCoords[name];
-        })
+        .filter(name => hasCountryData(name) && countryCoords[name])
         .map(name => ({
           name: name,
           lat: countryCoords[name].lat,
           lng: countryCoords[name].lng,
-          score: countriesData[name].emotion_score,
-          hover: false
+          score: countriesData[name].emotion_score
         }));
       
       world.htmlElementsData(markers);
+      updateWorldRating();
     }
 
     function handlePolygonHover(polygon) {
+      const previousHovered = currentHoveredCountry;
+      
       if (!polygon) {
-        const markers = world.htmlElementsData();
-        markers.forEach(m => {
-          m.hover = false;
-        });
-        world.htmlElementsData(markers);
-        return;
+        currentHoveredCountry = null;
+      } else {
+        const countryName = polygon.properties.ADMIN;
+        if (hasCountryData(countryName)) {
+          currentHoveredCountry = countryName;
+        } else {
+          currentHoveredCountry = null;
+        }
       }
       
-      const countryName = polygon.properties.ADMIN;
-      const data = countriesData[countryName];
-      
-      if (data && data.emotion_score !== undefined) {
-        const markers = world.htmlElementsData();
-        markers.forEach(m => {
-          m.hover = m.name === countryName;
-        });
-        world.htmlElementsData(markers);
+      // Only update if hover state changed
+      if (previousHovered !== currentHoveredCountry) {
+        updateEmojiMarkers();
       }
     }
 
@@ -232,6 +289,10 @@
       if (!polygon) return;
       
       const countryName = polygon.properties.ADMIN;
+      
+      // Only allow clicking if country has data
+      if (!hasCountryData(countryName)) return;
+      
       selectedCountry = countryName;
       
       world.controls().autoRotate = false;
@@ -300,7 +361,10 @@
     async function loadAllCountriesData(countryFeatures) {
       for (const feat of countryFeatures) {
         const countryName = feat.properties.ADMIN;
-        await loadCountryData(countryName);
+        // Only load data for countries in our mapping
+        if (countrySubredditMapping[countryName]) {
+          await loadCountryData(countryName);
+        }
       }
       
       world.polygonsTransitionDuration(1000);
@@ -333,7 +397,7 @@
         } catch (error) {
           console.error('Status update error:', error);
         }
-      }, 2000);
+      }, 100);
 
       fetchInterval = setInterval(async () => {
         if (isFetching) return;

@@ -15,9 +15,9 @@ from .models import Country, RedditPost, FetchQueue, FetchStatus
 def check_emotion(titles, country):
     api_key = settings.GEMINI_API_KEY
     all_titles = " ".join(titles)
-    prompt = f"Rate the emotion of these sentences on a scale of 1 to 10, 1 (immediate end of world) 5 (x is ok) 10 (immediate utopia), consider this on the scale of {country} and not an individual, only respond with the number: '{all_titles}'"
+    prompt = f"ONLY GIVE ME ONE NUMBER BETWEEN 1 AND 10 THAT REPRESENTS THE OVERALL EMOTION OF THE FOLLOWING TEXTS: {all_titles}"
 
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent"
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent"
 
     headers = {
         "x-goog-api-key": api_key,
@@ -36,11 +36,48 @@ def check_emotion(titles, country):
         ]
     }
 
-    response = requests.post(url, headers=headers, json=data)
-    response_json = response.json()
-
-    text_output = response_json["candidates"][0]["content"]["parts"][0]["text"]
-    return int(text_output.strip())
+    try:
+        response = requests.post(url, headers=headers, json=data)
+        response_json = response.json()
+        
+        # Debug: print the full response
+        print(f"Gemini API response for {country}: {response_json}")
+        
+        # Check for error in response
+        if "error" in response_json:
+            print(f"Gemini API error: {response_json['error']}")
+            return 5  # Default neutral score
+        
+        # Check if candidates exist
+        if "candidates" not in response_json or not response_json["candidates"]:
+            print(f"No candidates in Gemini response for {country}")
+            return 5  # Default neutral score
+        
+        # Extract the text
+        text_output = response_json["candidates"][0]["content"]["parts"][0]["text"]
+        
+        # Try to extract just the number
+        score_text = text_output.strip()
+        # Remove any non-numeric characters except digits
+        import re
+        numbers = re.findall(r'\d+', score_text)
+        if numbers:
+            score = int(numbers[0])
+            # Clamp between 1 and 10
+            return max(1, min(10, score))
+        else:
+            print(f"Could not parse number from: {score_text}")
+            return 5
+            
+    except requests.exceptions.RequestException as e:
+        print(f"Network error calling Gemini API: {e}")
+        return 5
+    except (KeyError, IndexError, ValueError) as e:
+        print(f"Error parsing Gemini response: {e}")
+        return 5
+    except Exception as e:
+        print(f"Unexpected error in check_emotion: {e}")
+        return 5
 
 def dubai_posts(request):
     reddit = praw.Reddit(
@@ -115,7 +152,6 @@ def globe_countries(request):
         'Peru': 'peru',
         'Pakistan': 'pakistan',
         'Bangladesh': 'bangladesh',
-        'Israel': 'israel',
         'Saudi Arabia': 'saudiarabia',
     }
     
