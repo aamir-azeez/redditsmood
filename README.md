@@ -4,4 +4,4 @@
     <h2 align="center">Reddit's Mood</h2>
     </a>
 </p>
-Take a quick glance at what people are feeling!
+Take a quick glance at how people are feeling!
